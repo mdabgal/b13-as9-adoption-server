@@ -92,6 +92,19 @@ app.put("/pets/:id", async (req, res) => {
 
 });
 
+app.post("/requests", async (req, res) => {
+  const request = req.body;
+  const result = await db.collection("requests").insertOne(request);
+  res.send(result);
+});
+
+
+app.get("/requests", async (req, res) => {
+  const result = await db.collection("requests").find().toArray();
+  res.send(result);
+});
+
+
 
 
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
@@ -117,5 +130,3 @@ app.listen(port, () => {
 
 
 
-// RrDDZF8JzBXnmLPc
-// adoption
