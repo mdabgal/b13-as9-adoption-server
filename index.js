@@ -106,6 +106,31 @@ app.get("/requests", async (req, res) => {
 
 
 
+app.patch("/requests/:id", async (req, res) => {
+  try {
+    const id = req.params.id;
+    const status = req.body.status;
+
+    const result = await db.collection("requests").updateOne(
+      { _id: new ObjectId(id) },
+      { $set: { status } }
+    );
+
+    res.send({
+      success: true,
+      result,
+    });
+
+  } catch (error) {
+    res.status(500).send({
+      success: false,
+      message: error.message,
+    });
+  }
+});
+
+
+
 app.delete("/pets/:id", async (req, res) => {
   try {
     const id = req.params.id;
