@@ -106,6 +106,27 @@ app.get("/requests", async (req, res) => {
 
 
 
+app.delete("/pets/:id", async (req, res) => {
+  try {
+    const id = req.params.id;
+
+    const result = await petsCollection.deleteOne({
+      _id: new ObjectId(id),
+    });
+
+    if (result.deletedCount === 1) {
+      res.send({ success: true, message: "Pet deleted" });
+    } else {
+      res.status(404).send({ success: false, message: "Pet not found" });
+    }
+  } catch (error) {
+    res.status(500).send({ success: false, error: error.message });
+  }
+});
+
+
+
+
 
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
   } finally {
