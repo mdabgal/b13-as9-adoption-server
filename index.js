@@ -102,9 +102,11 @@ async function run() {
           query.name = { $regex: search, $options: "i" }; 
         }
 
-        if (species) {
-          query.species = { $regex: species, $options: "i" }; 
-        }
+       if (species) {
+ 
+  const speciesArray = species.split(",");
+  query.species = { $in: speciesArray };
+}
 
         
         if (!ownerEmail) {
