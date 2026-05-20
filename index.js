@@ -1,18 +1,25 @@
-
 const express = require('express');
 const dotenv = require("dotenv");
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const cors = require('cors');
+const cookieParser = require("cookie-parser");
+const jwt = require("jsonwebtoken");
 
 dotenv.config();
 const app = express();
-
-app.use(cors());
-app.use(express.json());
 const port = process.env.PORT || 8000;
 
-const uri = process.env.MONGODB_URI;
 
+app.use(cookieParser()); 
+app.use(express.json());
+
+app.use(cors({
+  origin: ['http://localhost:3000'], 
+  credentials: true 
+}));
+
+
+const uri = process.env.MONGODB_URI;
 const client = new MongoClient(uri, {
   serverApi: {
     version: ServerApiVersion.v1,
@@ -23,47 +30,94 @@ const client = new MongoClient(uri, {
 
 async function run() {
   try {
-
     await client.connect(); 
 
     const db = client.db("adoption");
     const petsCollection = db.collection("pets");
     const requestsCollection = db.collection("requests");
 
+    
+    const verifyToken = (req, res, next) => {
+      const token = req.cookies?.token; 
+
+      if (!token) {
+        return res.status(401).send({ message: "Unauthorized access! Login required." });
+      }
+
+      jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
+        if (err) {
+          return res.status(403).send({ message: "Forbidden access! Invalid token." });
+        }
+        
+        req.user = decoded; 
+        next(); 
+      });
+    };
+
+    app.post("/jwt", async (req, res) => {
+      try {
+        const user = req.body; 
+        
+        if (!user || !user.email) {
+          return res.status(400).send({ success: false, message: "Email is required" });
+        }
+
+        const token = jwt.sign(user, process.env.JWT_SECRET, { expiresIn: "7d" });
+
+        res.cookie("token", token, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
+        })
+        .send({ success: true, message: "Token stored securely!" });
+      } catch (error) {
+        res.status(500).send({ success: false, message: error.message });
+      }
+    });
+
+    app.post("/logout", async (req, res) => {
+      try {
+        res.clearCookie("token", {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
+        })
+        .send({ success: true, message: "Logged out and cookie cleared!" });
+      } catch (error) {
+        res.status(500).send({ success: false, message: error.message });
+      }
+    });
 
     
-app.get("/pets", async (req, res) => {
-  try {
-    const { search, species, ownerEmail } = req.query;
-    let query = {};
-    
-    
-    if (ownerEmail) {
-      query.ownerEmail = ownerEmail;
-    }
+    app.get("/pets", async (req, res) => {
+      try {
+        const { search, species, ownerEmail } = req.query;
+        let query = {};
+        
+        if (ownerEmail) {
+          query.ownerEmail = ownerEmail;
+        }
 
-  
-    if (search) {
-      query.name = { $regex: search, $options: "i" }; // 'i' মানে case-insensitive
-    }
+        if (search) {
+          query.name = { $regex: search, $options: "i" }; 
+        }
 
-  
-    if (species) {
-      query.species = { $regex: species, $options: "i" }; 
-    }
+        if (species) {
+          query.species = { $regex: species, $options: "i" }; 
+        }
 
-   
-    if (!ownerEmail) {
-      query.adopted = { $ne: true }; 
-    }
+        
+        if (!ownerEmail) {
+          query.status = { $ne: "adopted" }; 
+        }
 
-    const result = await petsCollection.find(query).toArray();
-    res.send(result);
-  } catch (error) {
-    res.status(500).send({ message: "Failed to fetch pets", error: error.message });
-  }
-});
-   
+        const result = await petsCollection.find(query).toArray();
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ message: "Failed to fetch pets", error: error.message });
+      }
+    });
+       
     app.get("/pets/:id", async (req, res) => {
       try {
         const id = req.params.id;
@@ -74,11 +128,9 @@ app.get("/pets", async (req, res) => {
       }
     });
 
-   
     app.post("/pets", async (req, res) => {
       try {
         const newPet = req.body;
-       
         if (!newPet.status) newPet.status = "available"; 
         
         const result = await petsCollection.insertOne(newPet);
@@ -88,30 +140,35 @@ app.get("/pets", async (req, res) => {
       }
     });
 
-   
     app.put("/pets/:id", async (req, res) => {
-      const id = req.params.id;
-      const updatedPet = req.body;
-      const result = await petsCollection.updateOne(
-        { _id: new ObjectId(id) },
-        { $set: updatedPet }
-      );
-      res.send(result);
+      try {
+        const id = req.params.id;
+        const updatedPet = req.body;
+        const result = await petsCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: updatedPet }
+        );
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ message: "Failed to update pet" });
+      }
     });
 
     app.delete('/pets/:id', async (req, res) => {
-      const id = req.params.id;
-      const result = await petsCollection.deleteOne({ _id: new ObjectId(id) });
-      res.send(result);
+      try {
+        const id = req.params.id;
+        const result = await petsCollection.deleteOne({ _id: new ObjectId(id) });
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ message: "Failed to delete pet" });
+      }
     });
 
-
-   
+    
     app.post("/requests", async (req, res) => {
       try {
         const request = req.body;
 
-      
         const pet = await petsCollection.findOne({ _id: new ObjectId(request.petId) });
         if (!pet) {
           return res.status(404).send({ success: false, message: "Pet not found!" });
@@ -120,7 +177,6 @@ app.get("/pets", async (req, res) => {
           return res.status(400).send({ success: false, message: "This pet is already adopted!" });
         }
 
-       
         if (pet.ownerEmail === request.userEmail) {
           return res.status(400).send({ 
             success: false, 
@@ -135,7 +191,6 @@ app.get("/pets", async (req, res) => {
       }
     });
 
-    
     app.get("/requests", async (req, res) => {
       try {
         const email = req.query.userEmail;
@@ -149,7 +204,6 @@ app.get("/pets", async (req, res) => {
       }
     });
 
-  
     app.get('/owner-requests', async (req, res) => {
       try {
         const ownerEmail = req.query.email;
@@ -163,27 +217,22 @@ app.get("/pets", async (req, res) => {
       }
     });
 
-   
     app.patch("/requests/:id", async (req, res) => {
       try {
         const id = req.params.id;
         const { status, petId } = req.body; 
 
-     
         const result = await requestsCollection.updateOne(
           { _id: new ObjectId(id) },
           { $set: { status: status } }
         );
 
-       
         if (status === "approved" && petId) {
-        
           await petsCollection.updateOne(
             { _id: new ObjectId(petId) },
             { $set: { status: "adopted" } }
           );
 
-         
           await requestsCollection.updateMany(
             { petId: petId, _id: { $ne: new ObjectId(id) }, status: "pending" },
             { $set: { status: "rejected" } }
@@ -196,7 +245,6 @@ app.get("/pets", async (req, res) => {
       }
     });
 
-   
     app.delete("/requests/:id", async (req, res) => {
       try {
         const id = req.params.id;
@@ -211,34 +259,36 @@ app.get("/pets", async (req, res) => {
       }
     });
 
-
-
-    
   
-   app.get("/owner-stats", async (req, res) => {
-  try {
-    const email = req.query.email;
-    if (!email) {
-      return res.status(400).send({ success: false, message: "Email is required" });
-    }
+    app.get("/owner-stats", verifyToken, async (req, res) => {
+      try {
+        const email = req.query.email;
+        if (!email) {
+          return res.status(400).send({ success: false, message: "Email is required" });
+        }
 
-   
-    const totalListings = await petsCollection.countDocuments({ ownerEmail: email });
-    const availablePets = await petsCollection.countDocuments({ ownerEmail: email, adopted: { $ne: true } });
-    const adoptedPets = await petsCollection.countDocuments({ ownerEmail: email, adopted: true });
+       
+        if (req.user.email !== email) {
+          return res.status(403).send({ success: false, message: "Forbidden! Token verification failed." });
+        }
 
-    res.send({
-      success: true,
-      stats: {
-        total: totalListings,
-        available: availablePets,
-        adopted: adoptedPets
+       
+        const totalListings = await petsCollection.countDocuments({ ownerEmail: email });
+        const availablePets = await petsCollection.countDocuments({ ownerEmail: email, status: "available" });
+        const adoptedPets = await petsCollection.countDocuments({ ownerEmail: email, status: "adopted" });
+
+        res.send({
+          success: true,
+          stats: {
+            total: totalListings,
+            available: availablePets,
+            adopted: adoptedPets
+          }
+        });
+      } catch (error) {
+        res.status(500).send({ success: false, message: error.message });
       }
     });
-  } catch (error) {
-    res.status(500).send({ success: false, message: error.message });
-  }
-});
 
     console.log("Database connected successfully!");
   } catch (error) {
