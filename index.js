@@ -4,7 +4,7 @@ const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const cors = require('cors');
 const jwt = require("jsonwebtoken");
 const cookieParser = require('cookie-parser');
-
+const { auth } = require("./auth");
 dotenv.config();
 const app = express();
 const port = process.env.PORT || 8000;
@@ -301,6 +301,12 @@ async function run() {
 }
 
 run().catch(console.dir);
+
+
+app.all("/api/auth/*", async (req, res) => {
+    const authResponse = await auth.handler(req);
+    return authResponse;
+});
 
 app.get('/', (req, res) => {
   res.send('Pet Adoption Server is running perfectly...')
