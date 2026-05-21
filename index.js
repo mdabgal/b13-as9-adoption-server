@@ -14,7 +14,9 @@ app.use(cookieParser());
 app.use(express.json());
 
 app.use(cors({
-  origin: ['http://localhost:3000'], 
+  origin: [
+    process.env.CLIENT_URL
+  ], 
   credentials: true 
 }));
 
@@ -30,7 +32,7 @@ const client = new MongoClient(uri, {
 
 async function run() {
   try {
-    await client.connect(); 
+    // await client.connect(); 
 
     const db = client.db("adoption");
     const petsCollection = db.collection("pets");
