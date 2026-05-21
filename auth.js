@@ -17,6 +17,11 @@ const auth = betterAuth({
       clientSecret: process.env.GOOGLE_SECRET,
     },
   },
+
+
+  advanced: {
+    useSecureCookies: true,
+  }
 });
 
 module.exports = { auth };
